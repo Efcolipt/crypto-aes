@@ -151,7 +151,7 @@ class AES {
 
     decipher.setAuthTag(tag);
 
-    let str = decipher.update(enc, null, 'utf8');
+    let str = decipher.update(enc.toString('base64'), undefined, 'utf8');
 
     str += decipher.final('utf8');
 

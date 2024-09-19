@@ -49,7 +49,7 @@ class AES {
     которая существует в почтовых клиентах, расшифровывающих письма S/MIME или PGP
   */
 
-  static aes256CbcEncrypt(message: string, key: Buffer, keyMac: Buffer): Buffer {
+  static aes256CbcEncrypt(message: string, key: Buffer, keyMac: Buffer): string {
     const enc = Buffer.from(message, "base64");
 
     const iv = randomBytes(16)
@@ -62,10 +62,10 @@ class AES {
 
     hmac.update(encryptedData)
 
-    return Buffer.concat([encryptedData, hmac.digest()])
+    return Buffer.concat([encryptedData, hmac.digest()]).toString('base64')
   }
 
-  static aes256CbcDecrypt(message: string, key: Buffer, keyMac: Buffer): Buffer {
+  static aes256CbcDecrypt(message: string, key: Buffer, keyMac: Buffer): string {
     const enc = Buffer.from(message, "base64");
 
     const payload: Buffer = enc.subarray(0, -32) // we retrieve the MAC at the end
@@ -86,7 +86,7 @@ class AES {
 
     const decipher: Decipher = createDecipheriv('aes-256-cbc', key, iv)
 
-    return Buffer.concat([decipher.update(cipherText), decipher.final()])
+    return Buffer.concat([decipher.update(cipherText), decipher.final()]).toString('utf-8')
   }
 
   /*
@@ -105,15 +105,15 @@ class AES {
   */
 
 
-  static aes256CtrEncrypt(nonce: Buffer, message: string, keyEnc: Buffer): Buffer {
+  static aes256CtrEncrypt(nonce: Buffer, message: string, keyEnc: Buffer): string {
     const enc = Buffer.from(message, "base64");
 
     const cipher: Cipher = createCipheriv('aes-256-ctr', keyEnc, nonce)
 
-    return Buffer.concat([nonce, cipher.update(enc), cipher.final()])
+    return Buffer.concat([nonce, cipher.update(enc), cipher.final()]).toString('base64')
   }
 
-  static aes256CtrDecrypt(message: string, keyEnc: Buffer): Buffer {
+  static aes256CtrDecrypt(message: string, keyEnc: Buffer): string {
     const enc = Buffer.from(message, "base64");
 
     const iv = enc.subarray(0, 16)
@@ -122,11 +122,11 @@ class AES {
 
     const decipher: Decipher = createDecipheriv('aes-256-ctr', keyEnc, iv)
 
-    return Buffer.concat([decipher.update(cipherText), decipher.final()])
+    return Buffer.concat([decipher.update(cipherText), decipher.final()]).toString('utf8')
   }
 
 
-  static aes256GcmEncrypt(message: string, key: Buffer): Buffer {
+  static aes256GcmEncrypt(message: string, key: Buffer): string {
     const iv = randomBytes(12);
 
     const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -135,10 +135,10 @@ class AES {
 
     const enc2 = cipher.final();
 
-    return Buffer.concat([enc1, enc2, iv, cipher.getAuthTag()]);
+    return Buffer.concat([enc1, enc2, iv, cipher.getAuthTag()]).toString('base64');
   }
 
-  static aes256GcmDecrypt(encryptedData: string, key: Buffer): Buffer {
+  static aes256GcmDecrypt(encryptedData: string, key: Buffer): string {
     let enc = Buffer.from(encryptedData, "base64");
 
     const iv = enc.subarray(enc.length - 28, enc.length - 16);

@@ -1,13 +1,21 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'crypto';
+import { BufferUrlBase64 } from './buffer-url-base64';
+import { Hmac } from './hmac';
 
-  /**
-   * Generates a random string of a given size
-   */
+/**
+ * Generates a random string of a given size
+ */
 const generateRandomIV = (size: number): Buffer => {
   const bits = (size + 1) * 6;
   const buffer = randomBytes(Math.ceil(bits / 8));
 
-  return Buffer.from(buffer.toString('base64').slice(0, size))
-}
+  return Buffer.from(buffer.toString('base64').slice(0, size));
+};
 
 export class Aes256CBC {
   /**
@@ -16,11 +24,11 @@ export class Aes256CBC {
    */
   #cryptoKey: Buffer;
 
-    /**
+  /**
    * Use `dot` as a separator for joining encrypted value, iv and the
    * hmac hash. The idea is borrowed from JWTs.
    */
-   #separator = '.';
+  #separator = '.';
 
   constructor(key: string | Buffer) {
     this.#cryptoKey = createHash('sha256').update(key).digest();
@@ -84,7 +92,7 @@ export class Aes256CBC {
      * Returns the result + hmac
      */
     return `${result}${this.#separator}${new Hmac(this.#cryptoKey).generate(
-      result
+      result,
     )}`;
   }
 
@@ -127,7 +135,7 @@ export class Aes256CBC {
      */
     const isValidHmac = new Hmac(this.#cryptoKey).compare(
       `${encryptedEncoded}${this.#separator}${ivEncoded}`,
-      hash
+      hash,
     );
 
     if (!isValidHmac) {
@@ -142,7 +150,7 @@ export class Aes256CBC {
       const decipher = createDecipheriv(this.algorithm, this.#cryptoKey, iv);
       const decrypted =
         decipher.update(encrypted, 'base64', 'utf8') + decipher.final('utf8');
-      const data: {message: T} = JSON.parse(decrypted)
+      const data: { message: T } = JSON.parse(decrypted);
       return data.message;
     } catch {
       return null;
@@ -150,3 +158,99 @@ export class Aes256CBC {
   }
 }
 
+export class Aes256CTR {
+  /**
+   * The key for signing and encrypting values. It is derived
+   * from the user provided secret.
+   */
+  #cryptoKey: Buffer;
+  #separator = 'checksum';
+
+  constructor(key: string | Buffer) {
+    this.#cryptoKey = createHash('sha256').update(key).digest();
+  }
+
+  /**
+   * The algorithm in use
+   */
+  get algorithm(): string {
+    return 'aes-256-ctr';
+  }
+
+  /**
+   * Encrypt a given piece of value using the app secret. A wide range of
+   * data types are supported.
+   *
+   * - String
+   * - Arrays
+   * - Objects
+   * - Booleans
+   * - Numbers
+   * - Dates
+   *
+   * You can optionally define a purpose for which the value was encrypted and
+   * mentioning a different purpose/no purpose during decrypt will fail.
+   */
+  encrypt(message: unknown): string {
+    try {
+      const iv = generateRandomIV(16);
+
+      const cipher = createCipheriv(this.algorithm, this.#cryptoKey, iv);
+
+      const encodedValue = JSON.stringify({ message });
+
+      return Buffer.concat([
+        iv,
+        cipher.update(Buffer.from(`${this.#separator}${encodedValue}`)),
+        cipher.final(),
+      ]).toString('base64');
+    } catch {
+      throw new Error('Can not encrypt account private keys');
+    }
+  }
+
+  /**
+   * Decrypt value and verify it against a purpose
+   */
+  decrypt<T>(encrypted: string): T {
+    try {
+      const input = Buffer.from(encrypted, 'base64');
+
+      if (input.length < 17) {
+        throw new TypeError(
+          'Provided "encrypted" must decrypt to a non-empty string',
+        );
+      }
+
+      const iv = input.subarray(0, 16);
+
+      const decipher = createDecipheriv(this.algorithm, this.#cryptoKey, iv);
+
+      const cipherText = input.subarray(16);
+
+      const str = Buffer.concat([
+        decipher.update(cipherText),
+        decipher.final(),
+      ]).toString();
+
+      if (str.slice(0, this.#separator.length) !== this.#separator) {
+        throw new Error('Aes256 decryption failed');
+      }
+
+      const text = str.slice(this.#separator.length);
+
+      try {
+        const data: { message: T } = JSON.parse(text);
+
+        return data.message;
+      } catch {
+        /* empty */
+      }
+
+      return text as T;
+    } catch (exc) {
+      console.log(exc);
+      throw new Error('Can not decrypt account private keys');
+    }
+  }
+}
